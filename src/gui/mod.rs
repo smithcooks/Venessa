@@ -178,7 +178,7 @@ unsafe fn setup_controls(hwnd: HWND) {
     // 2. Gemini Model
     add_control(static_class.as_ptr(), "Gemini Model:", 0, 20, 90, 210, 20, 0);
     let model_combo = add_control(combo_class.as_ptr(), "", WS_BORDER | WS_TABSTOP | CBS_DROPDOWNLIST, 20, 112, 210, 160, ID_MODEL_COMBO);
-    for m in &["gemini-2.5-flash", "gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"] {
+    for m in &["gemini-3.5-flash-lite", "gemini-3-flash-preview", "gemini-3.8-flash", "gemini-3.5-transcribe"] {
         let text_u16: Vec<u16> = m.encode_utf16().chain(std::iter::once(0)).collect();
         SendMessageW(model_combo, CB_ADDSTRING, 0, text_u16.as_ptr() as LPARAM);
     }
@@ -186,7 +186,7 @@ unsafe fn setup_controls(hwnd: HWND) {
     // 3. Hotkey
     add_control(static_class.as_ptr(), "Activation Hotkey:", 0, 255, 90, 210, 20, 0);
     add_control(edit_class.as_ptr(), "", WS_BORDER | WS_TABSTOP | ES_AUTOHSCROLL, 255, 112, 210, 24, ID_HOTKEY_EDIT);
-    add_control(static_class.as_ptr(), "e.g. Ctrl+Space, Alt+Space, Ctrl+Shift+V, F8, CapsLock", 0, 255, 138, 220, 16, 0);
+    add_control(static_class.as_ptr(), "e.g. Alt, Ctrl+Space, Alt+Space, F8, CapsLock", 0, 255, 138, 220, 16, 0);
 
     // 4. Trigger Mode
     add_control(static_class.as_ptr(), "Trigger Mode:", 0, 20, 160, 210, 20, 0);
@@ -226,10 +226,10 @@ unsafe fn load_config_into_controls(hwnd: HWND) {
             use windows_sys::Win32::UI::WindowsAndMessaging::GetDlgItem;
             let model_combo = GetDlgItem(hwnd, ID_MODEL_COMBO as i32);
             let idx = match cfg.gemini_model.as_str() {
-                "gemini-1.5-flash" => 1,
-                "gemini-2.0-flash" => 2,
-                "gemini-1.5-pro" => 3,
-                _ => 0, // default gemini-2.5-flash
+                "gemini-3-flash-preview" => 1,
+                "gemini-3.8-flash" => 2,
+                "gemini-3.5-transcribe" => 3,
+                _ => 0, // default gemini-3.5-flash-lite
             };
             SendMessageW(model_combo, CB_SETCURSEL, idx, 0);
 
@@ -259,10 +259,10 @@ unsafe fn save_controls_into_config(hwnd: HWND) {
     let model_combo = GetDlgItem(hwnd, ID_MODEL_COMBO as i32);
     let model_idx = SendMessageW(model_combo, CB_GETCURSEL, 0, 0) as usize;
     let gemini_model = match model_idx {
-        1 => "gemini-1.5-flash".to_string(),
-        2 => "gemini-2.0-flash".to_string(),
-        3 => "gemini-1.5-pro".to_string(),
-        _ => "gemini-2.5-flash".to_string(),
+        1 => "gemini-3-flash-preview".to_string(),
+        2 => "gemini-3.8-flash".to_string(),
+        3 => "gemini-3.5-transcribe".to_string(),
+        _ => "gemini-3.5-flash-lite".to_string(),
     };
 
     let mode_combo = GetDlgItem(hwnd, ID_MODE_COMBO as i32);
@@ -333,7 +333,6 @@ unsafe extern "system" fn settings_wnd_proc(
             0
         }
         WM_CLOSE => {
-            // Do NOT exit application - simply hide the window!
             ShowWindow(hwnd, SW_HIDE);
             0
         }

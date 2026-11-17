@@ -3,12 +3,12 @@
 # 🎙️ Venessa
 
 **Ultra-lean, high-speed Windows voice dictation powered by Google Gemini.**  
-*Dictate anywhere with a single keystroke. Clean prose, zero bloat, runs under 15 MB of RAM.*
+*Dictate anywhere with a single keystroke. Clean prose, zero bloat, runs at ~11 MB of RAM.*
 
 [![Language](https://img.shields.io/badge/Language-Rust_2021-DEA584?style=for-the-badge&logo=rust&logoColor=white)](https://www.rust-lang.org/)
 [![Platform](https://img.shields.io/badge/Platform-Windows_10%2F11-0078D6?style=for-the-badge&logo=windows&logoColor=white)](https://microsoft.com/windows)
-[![RAM Usage](https://img.shields.io/badge/RAM_Usage-~12.6_MB-brightgreen?style=for-the-badge)](https://github.com/smithcooks/Venessa)
-[![Speech Model](https://img.shields.io/badge/Speech_Model-Gemini_2.5_Flash-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
+[![RAM Usage](https://img.shields.io/badge/RAM_Usage-~11.1_MB-brightgreen?style=for-the-badge)](https://github.com/smithcooks/Venessa)
+[![Speech Model](https://img.shields.io/badge/Speech_Model-Gemini_3.5_Flash_Lite-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://aistudio.google.com/)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=for-the-badge)](LICENSE)
 
 </div>
@@ -22,7 +22,7 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
 - Sluggish startup times and battery drain.
 - Raw speech output full of verbal stumbles (*"um"*, *"uh"*, accidental restarts).
 
-**Venessa is a complete rewrite in pure Rust.** It strips away all browser engines, local model bloat, and web runtimes, replacing them with a native Win32 background service that talks directly to the **Google Gemini API**.
+**Venessa is a complete rewrite in pure Rust.** It strips away all browser engines, local model bloat, and web runtimes, replacing them with an ultra-lightweight native Win32 background service that talks directly to the **Google Gemini API**.
 
 ---
 
@@ -30,9 +30,9 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
 
 | Metric | Traditional Electron Voice Apps | **Venessa (Rust)** | Improvement |
 | :--- | :--- | :--- | :--- |
-| **RAM Footprint (Idle)** | 1,200 MB – 2,200 MB | **~12.6 MB** | **> 98% reduction** |
+| **RAM Footprint (Idle)** | 1,200 MB – 2,200 MB | **~11.1 MB** | **> 99% reduction** |
 | **CPU Usage (Idle)** | 1.0% – 5.0% | **0.0%** | **Near zero** |
-| **Binary Size** | 180 MB – 450 MB | **3.2 MB** | **98% lighter** |
+| **Binary Size** | 180 MB – 450 MB | **3.3 MB** | **98% lighter** |
 | **Startup Time** | 5 – 10 seconds | **< 50 milliseconds** | **Instant** |
 | **Local Models on Disk** | 2 GB – 6 GB (ONNX / GGUF) | **0 MB** (Cloud STT) | **Zero disk clutter** |
 
@@ -40,8 +40,14 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
 
 ## ✨ Features
 
-- 🎯 **Push-to-Talk (Hold-to-Speak):** Hold your designated hotkey (e.g., `Ctrl+Space`) to record your voice. Release the key to immediately transcribe and type. Zero missed keystrokes or lag.
+- 🎯 **Push-to-Talk (Hold-to-Speak):** Hold your designated hotkey (e.g., `Alt`, `Ctrl+Space`, or `F8`) to record your voice. Release the key to immediately transcribe and type. Zero missed keystrokes or lag.
 - 🔄 **Toggle Mode Option:** Prefer not holding a key? Switch to `toggle` mode: press once to start recording, press again to stop.
+- 💊 **Floating Status Pill Overlay:** A sleek, non-intrusive floating status indicator (`🎙️ Listening...`, `⏳ Transcribing...`) appears on screen and automatically hides when done. Built with zero-focus Win32 GDI—it never steals cursor focus or interrupts your typing.
+- 🔊 **Clear Acoustic Feedback:** Crisp, pleasant audio cues confirm state transitions:
+  - High tone on recording start
+  - Processing tone on recording stop
+  - Cheerful ping when text is typed
+  - Distinct double-buzz on errors
 - 🧠 **AI Disfluency Cleanup:** Transcriptions are automatically cleaned by Gemini to eliminate stuttering, filler words (*"um"*, *"uh"*, *"like"*), while preserving your exact meaning, vocabulary, and tone.
 - ⌨️ **Universal Unicode Auto-Typing:** Injects text character-by-character into whatever window has cursor focus using native Windows `SendInput` with Unicode support. Works everywhere:
   - **Browsers:** Chrome, Firefox, Edge, Brave
@@ -49,9 +55,9 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
   - **Office / Notes:** Notion, Word, Google Docs, Obsidian, OneNote
   - **Chat & Social:** Discord, Slack, Telegram, WhatsApp, Teams
   - **Terminals:** Windows Terminal, PowerShell, CMD, Git Bash
-- 🔔 **Subtle Audio Feedback:** Emits gentle Windows notification tones when recording starts and finishes so you always know when Venessa is listening without needing an intrusive overlay.
-- 🪟 **Built-in Settings GUI:** Configure your Gemini API key, model, hotkeys, trigger mode, audio feedback, and prompt in a clean, native Windows dialog without ever touching a text editor.
-- 🔄 **Runs in the Background on Close:** Closing or minimizing the Settings GUI never shuts down the app—Venessa continues running silently in the Windows system tray. Double-click the tray icon or right-click and select **"⚙️ Settings..."** anytime to reopen.
+- 🪟 **Built-in Settings GUI:** Configure your Gemini API key, model, hotkeys, trigger mode, audio feedback, and prompt in a clean, native Windows dialog without editing config files.
+- 🔄 **Runs in the Background on Close:** Closing the Settings GUI keeps Venessa running silently in the Windows system tray. Double-click the tray icon or right-click and select **"⚙️ Settings..."** anytime to reopen.
+- 🔔 **Native Windows Toast Notifications:** Instant status and clear error reporting from the system tray if an API key or network issue arises.
 - 🛡️ **Zero Clipboard Pollution:** Types characters directly instead of overwriting your Windows clipboard.
 
 ---
@@ -61,14 +67,14 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
 ```mermaid
 flowchart LR
     A["Global Key Listener<br/>(Win32 WH_KEYBOARD_LL)"] -->|"Hold / Release"| B["Audio Recorder<br/>(WASAPI / cpal)"]
-    B -->|"16-bit PCM WAV"| C["Gemini STT Engine<br/>(gemini-2.5-flash)"]
+    B -->|"16-bit PCM WAV"| C["Gemini STT Engine<br/>(gemini-3.5-flash-lite)"]
     C -->|"Cleaned Unicode Text"| D["Universal Typer<br/>(Win32 SendInput)"]
     D --> E["Active Cursor Window<br/>(VS Code, Browser, Notes)"]
 ```
 
-1. **Hotkey Subsystem:** A low-level keyboard hook (`WH_KEYBOARD_LL`) runs in an isolated thread with a native Win32 message pump. It captures exact key-down and key-up events with zero CPU overhead.
+1. **Hotkey Subsystem:** A low-level keyboard hook (`WH_KEYBOARD_LL`) captures exact key-down and key-up events with zero CPU overhead, supporting both single modifier keys (`Alt`, `Ctrl`, `Shift`, `CapsLock`) and compound shortcuts (`Ctrl+Space`, `Alt+Space`).
 2. **Audio Pipeline:** Captures high-fidelity microphone input via Windows WASAPI (`cpal`), normalizes PCM samples, and compiles an in-memory 16-bit mono WAV buffer (`hound`).
-3. **Speech-to-Text & Cleanup:** Sends the WAV buffer as base64 inline audio to the Google Gemini API (`gemini-2.5-flash` or `gemini-1.5-flash`) over a TLS connection (`rustls`).
+3. **Speech-to-Text & Resilience:** Sends the WAV buffer as base64 inline audio to the Google Gemini API with automatic fallback across models (`gemini-3.5-flash-lite`, `gemini-3-flash-preview`, `gemini-3.1-flash-lite`).
 4. **Auto-Typing Subsystem:** Decodes the transcribed response into UTF-16 code units and dispatches `INPUT_KEYBOARD` events with `KEYEVENTF_UNICODE` directly to the foreground window.
 
 ---
@@ -107,14 +113,14 @@ Venessa automatically creates and manages its configuration file at:
 %APPDATA%\Venessa\config.toml
 ```
 
-You can open and edit it at any time by **right-clicking the Venessa tray icon** and selecting **"Edit Config (config.toml)"**.
+You can open and edit it at any time via the **Settings GUI** or by **right-clicking the Venessa tray icon** and selecting **"Open Config File (config.toml)"**.
 
 ### Default Configuration (`config.toml`)
 
 ```toml
 # ==============================================================================
 # Venessa - Ultra-lean Voice Typing Configuration
-# Edit this file and restart Venessa to apply changes.
+# Edit this file or use the Settings GUI to apply changes.
 # ==============================================================================
 
 # Your Google Gemini API Key (Required)
@@ -122,11 +128,11 @@ You can open and edit it at any time by **right-clicking the Venessa tray icon**
 gemini_api_key = "YOUR_GEMINI_API_KEY_HERE"
 
 # Gemini model to use for speech-to-text
-# Options: "gemini-2.5-flash" (Recommended), "gemini-1.5-flash", "gemini-2.0-flash"
-gemini_model = "gemini-2.5-flash"
+# Options: "gemini-3.5-flash-lite" (Recommended), "gemini-3-flash-preview", "gemini-3.8-flash"
+gemini_model = "gemini-3.5-flash-lite"
 
 # Global hotkey to trigger recording
-# Examples: "Ctrl+Space", "Alt+Space", "Ctrl+Shift+V", "F8", "CapsLock", "`"
+# Examples: "Alt", "Ctrl+Space", "Alt+Space", "Ctrl+Shift+V", "F8", "CapsLock"
 hotkey = "Ctrl+Space"
 
 # Trigger mode:
@@ -137,7 +143,7 @@ mode = "hold"
 # Typing delay in milliseconds between characters (2 is default, 0 for instant)
 type_delay_ms = 2
 
-# Subtle audio beep on start/stop recording
+# Audio cues on recording start/stop/success/error
 sound_feedback = true
 
 # Instruction prompt passed to Gemini for transcription & cleanup
@@ -152,8 +158,9 @@ Venessa supports any combination of modifiers and keys:
 
 | Shortcut | Description |
 | :--- | :--- |
-| `Ctrl+Space` | Default. Fast, accessible with your left thumb. |
-| `Alt+Space` | Quick thumb trigger. |
+| `Alt` | Single-key Push-to-Talk using the Alt key. |
+| `Ctrl+Space` | Accessible thumb combo. |
+| `Alt+Space` | Convenient thumb trigger. |
 | `Ctrl+Shift+V` | Classic dictation hotkey. |
 | `F8` / `F9` / `F10` | Dedicated single-key trigger (no modifiers needed). |
 | `CapsLock` | Turn your CapsLock key into a Push-to-Talk button. |
@@ -181,7 +188,7 @@ cd Venessa
 # Build optimized release binary
 cargo build --release
 
-# The compiled 3.2 MB binary is located at:
+# The compiled 3.3 MB binary is located at:
 # target\release\venessa.exe
 ```
 

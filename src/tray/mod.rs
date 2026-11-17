@@ -1,14 +1,26 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, OnceLock};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrayCommand {
     OpenSettings,
     OpenConfig,
     Quit,
 }
 
+#[derive(Debug, Clone)]
+pub enum TrayUiAction {
+    ShowNotification {
+        title: String,
+        message: String,
+        is_error: bool,
+    },
+    UpdateTooltip(String),
+}
+
 static TRAY_SENDER: OnceLock<crossbeam_channel::Sender<TrayCommand>> = OnceLock::new();
+static TRAY_UI_TX: OnceLock<crossbeam_channel::Sender<TrayUiAction>> = OnceLock::new();
+static TRAY_HWND: AtomicUsize = AtomicUsize::new(0);
 
 #[cfg(windows)]
 pub struct TrayIcon {
@@ -17,17 +29,21 @@ pub struct TrayIcon {
 
 #[cfg(windows)]
 impl TrayIcon {
-    pub fn new(cmd_sender: crossbeam_channel::Sender<TrayCommand>) -> Self {
+    pub fn new(cmd_sender: crossbeam_channel::Sender<TrayCommand>, initial_tooltip: &str) -> Self {
         let _ = TRAY_SENDER.set(cmd_sender);
+        let (ui_tx, ui_rx) = crossbeam_channel::unbounded::<TrayUiAction>();
+        let _ = TRAY_UI_TX.set(ui_tx);
+
         let is_running = Arc::new(AtomicBool::new(true));
         let running_clone = Arc::clone(&is_running);
+        let init_tip = initial_tooltip.to_string();
 
         std::thread::spawn(move || {
             use std::ptr::null_mut;
             use windows_sys::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
             use windows_sys::Win32::UI::Shell::{
-                Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE,
-                NOTIFYICONDATAW,
+                Shell_NotifyIconW, NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_ERROR,
+                NIIF_INFO, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
             };
             use windows_sys::Win32::UI::WindowsAndMessaging::{
                 AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu,
@@ -92,7 +108,6 @@ impl TrayIcon {
                             );
                             DestroyMenu(menu);
                         } else if event == WM_LBUTTONDBLCLK {
-                            // Double-click tray icon opens settings GUI!
                             if let Some(s) = TRAY_SENDER.get() {
                                 let _ = s.send(TrayCommand::OpenSettings);
                             }
@@ -159,6 +174,8 @@ impl TrayIcon {
                     null_mut(),
                 );
 
+                TRAY_HWND.store(hwnd as usize, Ordering::SeqCst);
+
                 let icon: HICON = LoadIconW(0 as HINSTANCE, IDI_APPLICATION);
 
                 let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
@@ -169,8 +186,7 @@ impl TrayIcon {
                 nid.uCallbackMessage = WM_TRAYICON;
                 nid.hIcon = icon;
 
-                let tip_text = "Venessa: Voice Dictation (Hold Ctrl+Space to speak)";
-                let tip_utf16: Vec<u16> = tip_text.encode_utf16().take(127).chain(std::iter::once(0)).collect();
+                let tip_utf16: Vec<u16> = init_tip.encode_utf16().take(127).chain(std::iter::once(0)).collect();
                 for (i, &c) in tip_utf16.iter().enumerate() {
                     if i < nid.szTip.len() {
                         nid.szTip[i] = c;
@@ -178,6 +194,58 @@ impl TrayIcon {
                 }
 
                 Shell_NotifyIconW(NIM_ADD, &nid);
+
+                // Dedicated thread for handling UI updates (notifications, tooltip changes)
+                let hwnd_val = hwnd as usize;
+                std::thread::spawn(move || {
+                    let hwnd = hwnd_val as HWND;
+                    let icon = LoadIconW(0 as HINSTANCE, IDI_APPLICATION);
+                    while let Ok(action) = ui_rx.recv() {
+                        match action {
+                            TrayUiAction::ShowNotification { title, message, is_error } => {
+                                let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
+                                nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+                                nid.hWnd = hwnd;
+                                nid.uID = 1;
+                                nid.uFlags = NIF_INFO;
+                                nid.hIcon = icon;
+                                nid.dwInfoFlags = if is_error { NIIF_ERROR } else { NIIF_INFO };
+
+                                let title_u16: Vec<u16> = title.encode_utf16().take(63).chain(std::iter::once(0)).collect();
+                                for (i, &c) in title_u16.iter().enumerate() {
+                                    if i < nid.szInfoTitle.len() {
+                                        nid.szInfoTitle[i] = c;
+                                    }
+                                }
+
+                                let msg_u16: Vec<u16> = message.encode_utf16().take(255).chain(std::iter::once(0)).collect();
+                                for (i, &c) in msg_u16.iter().enumerate() {
+                                    if i < nid.szInfo.len() {
+                                        nid.szInfo[i] = c;
+                                    }
+                                }
+
+                                Shell_NotifyIconW(NIM_MODIFY, &nid);
+                            }
+                            TrayUiAction::UpdateTooltip(text) => {
+                                let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
+                                nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+                                nid.hWnd = hwnd;
+                                nid.uID = 1;
+                                nid.uFlags = NIF_TIP;
+
+                                let tip_u16: Vec<u16> = text.encode_utf16().take(127).chain(std::iter::once(0)).collect();
+                                for (i, &c) in tip_u16.iter().enumerate() {
+                                    if i < nid.szTip.len() {
+                                        nid.szTip[i] = c;
+                                    }
+                                }
+
+                                Shell_NotifyIconW(NIM_MODIFY, &nid);
+                            }
+                        }
+                    }
+                });
 
                 let mut msg = std::mem::zeroed();
                 while running_clone.load(Ordering::SeqCst) && GetMessageW(&mut msg, 0 as _, 0, 0) > 0 {
@@ -191,6 +259,22 @@ impl TrayIcon {
         });
 
         Self { is_running }
+    }
+
+    pub fn notify(title: &str, message: &str, is_error: bool) {
+        if let Some(tx) = TRAY_UI_TX.get() {
+            let _ = tx.send(TrayUiAction::ShowNotification {
+                title: title.to_string(),
+                message: message.to_string(),
+                is_error,
+            });
+        }
+    }
+
+    pub fn update_tip(text: &str) {
+        if let Some(tx) = TRAY_UI_TX.get() {
+            let _ = tx.send(TrayUiAction::UpdateTooltip(text.to_string()));
+        }
     }
 
     #[allow(dead_code)]

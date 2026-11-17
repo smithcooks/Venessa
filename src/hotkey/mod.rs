@@ -15,7 +15,6 @@ pub struct HotkeyConfig {
     pub require_alt: bool,
     pub require_shift: bool,
     pub require_win: bool,
-    #[allow(dead_code)]
     pub is_modifier_only: bool,
 }
 
@@ -64,9 +63,19 @@ impl HotkeyConfig {
 
         let is_modifier_only = target_vk == 0 && (require_ctrl || require_alt || require_shift || require_win);
 
-        // Fallback to Space if nothing valid
-        if target_vk == 0 && !is_modifier_only {
-            target_vk = 0x20;
+        if is_modifier_only {
+            if require_alt && !require_ctrl && !require_shift && !require_win {
+                target_vk = 0x12; // VK_MENU (Alt)
+            } else if require_ctrl && !require_alt && !require_shift && !require_win {
+                target_vk = 0x11; // VK_CONTROL
+            } else if require_shift && !require_ctrl && !require_alt && !require_win {
+                target_vk = 0x10; // VK_SHIFT
+            } else if require_win && !require_ctrl && !require_alt && !require_shift {
+                target_vk = 0x5B; // VK_LWIN
+            }
+        } else if target_vk == 0 {
+            // Default fallback if nothing specified
+            target_vk = 0x20; // Space
             require_ctrl = true;
         }
 
@@ -91,6 +100,19 @@ pub fn update_hotkey(new_config: HotkeyConfig) {
             *cfg = new_config;
             IS_KEY_DOWN.store(false, Ordering::SeqCst);
         }
+    }
+}
+
+fn is_vk_match(vk_code: u32, target_vk: u32) -> bool {
+    if vk_code == target_vk {
+        return true;
+    }
+    match target_vk {
+        0x12 => vk_code == 0x12 || vk_code == 0xA4 || vk_code == 0xA5, // VK_MENU, VK_LMENU, VK_RMENU
+        0x11 => vk_code == 0x11 || vk_code == 0xA2 || vk_code == 0xA3, // VK_CONTROL, VK_LCONTROL, VK_RCONTROL
+        0x10 => vk_code == 0x10 || vk_code == 0xA0 || vk_code == 0xA1, // VK_SHIFT, VK_LSHIFT, VK_RSHIFT
+        0x5B => vk_code == 0x5B || vk_code == 0x5C,                     // VK_LWIN, VK_RWIN
+        _ => false,
     }
 }
 
@@ -151,12 +173,16 @@ impl HotkeyManager {
                             let win_down = (GetAsyncKeyState(VK_LWIN as i32) as u16 & 0x8000 != 0)
                                 || (GetAsyncKeyState(VK_RWIN as i32) as u16 & 0x8000 != 0);
 
-                            let mods_satisfied = (!cfg.require_ctrl || ctrl_down)
-                                && (!cfg.require_alt || alt_down)
-                                && (!cfg.require_shift || shift_down)
-                                && (!cfg.require_win || win_down);
+                            let mods_satisfied = if cfg.is_modifier_only {
+                                true
+                            } else {
+                                (!cfg.require_ctrl || ctrl_down)
+                                    && (!cfg.require_alt || alt_down)
+                                    && (!cfg.require_shift || shift_down)
+                                    && (!cfg.require_win || win_down)
+                            };
 
-                            if kbd.vkCode == cfg.target_vk {
+                            if is_vk_match(kbd.vkCode, cfg.target_vk) {
                                 if is_down_event && mods_satisfied {
                                     if !IS_KEY_DOWN.swap(true, Ordering::SeqCst) {
                                         if let Some(s) = HOOK_SENDER.get() {

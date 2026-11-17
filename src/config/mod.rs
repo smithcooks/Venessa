@@ -9,11 +9,11 @@ pub struct VenessaConfig {
     #[serde(default = "default_api_key")]
     pub gemini_api_key: String,
 
-    /// Gemini model to use for speech-to-text & cleanup (e.g. "gemini-2.5-flash", "gemini-1.5-flash")
+    /// Gemini model to use for speech-to-text & cleanup (e.g. "gemini-3.5-flash-lite", "gemini-3-flash-preview")
     #[serde(default = "default_model")]
     pub gemini_model: String,
 
-    /// Hotkey to trigger dictation (e.g. "Ctrl+Space", "Alt+Space", "Ctrl+Shift+V", "F8", "CapsLock")
+    /// Hotkey to trigger dictation (e.g. "Ctrl+Space", "Alt", "Alt+Space", "Ctrl+Shift+V", "F8", "CapsLock")
     #[serde(default = "default_hotkey")]
     pub hotkey: String,
 
@@ -39,7 +39,7 @@ fn default_api_key() -> String {
 }
 
 fn default_model() -> String {
-    "gemini-2.5-flash".to_string()
+    "gemini-3.5-flash-lite".to_string()
 }
 
 fn default_hotkey() -> String {
@@ -88,7 +88,13 @@ impl VenessaConfig {
         let path = Self::config_path();
         if path.exists() {
             if let Ok(content) = fs::read_to_string(&path) {
-                if let Ok(config) = toml::from_str::<VenessaConfig>(&content) {
+                if let Ok(mut config) = toml::from_str::<VenessaConfig>(&content) {
+                    // Auto-migrate deprecated models that return 404 to active modern models
+                    let clean = config.gemini_model.trim().trim_start_matches("models/");
+                    if clean == "gemini-2.5-flash" || clean == "gemini-1.5-flash" || clean == "gemini-2.0-flash" || clean.is_empty() {
+                        config.gemini_model = "gemini-3.5-flash-lite".to_string();
+                        let _ = config.save();
+                    }
                     return config;
                 }
             }
@@ -107,7 +113,7 @@ impl VenessaConfig {
         }
 
         let toml_str = toml::to_string_pretty(self).unwrap_or_default();
-        let header = "# Venessa - Ultra-lean Voice Typing Configuration\n# Edit this file and restart Venessa to apply changes.\n\n";
+        let header = "# Venessa - Ultra-lean Voice Typing Configuration\n# Edit this file or use the Settings GUI to apply changes.\n\n";
         fs::write(&path, format!("{}{}", header, toml_str))?;
         Ok(())
     }
