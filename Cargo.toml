@@ -1,0 +1,58 @@
+[package]
+name = "venessa"
+version = "0.1.0"
+edition = "2021"
+authors = ["smithcooks"]
+description = "Ultra-lean, high-speed Windows voice typing powered by Google Gemini"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/smithcooks/Venessa"
+
+[[bin]]
+name = "venessa"
+path = "src/main.rs"
+
+[dependencies]
+# Audio capture (uses WASAPI automatically on Windows)
+cpal = "0.15"
+
+# WAV encoder for sending audio to Gemini
+hound = "3.5"
+
+# HTTP client with rustls (pure Rust TLS, zero C OpenSSL dependency)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+# Base64 for inline audio encoding
+base64 = "0.22"
+
+# Utilities & paths
+dirs = "5"
+anyhow = "1"
+crossbeam-channel = "0.5"
+
+# Native Windows APIs (Tray icon, Low-level Keyboard Hook for Push-to-Talk, SendInput)
+[target.'cfg(windows)'.dependencies.windows-sys]
+version = "0.59"
+features = [
+    "Win32_Foundation",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_Graphics_Gdi",
+    "Win32_System_LibraryLoader",
+    "Win32_System_Threading",
+    "Win32_Media_Audio",
+]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

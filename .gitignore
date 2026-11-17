@@ -1,0 +1,12 @@
+# Rust build artifacts
+target/
+**/*.rs.bk
+*.pdb
+
+# Local secret / API key configs
+config.toml
+
+# System files
+Thumbs.db
+[Ee]xcluded/
+.DS_Store
