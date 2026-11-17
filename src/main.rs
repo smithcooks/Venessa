@@ -3,6 +3,7 @@
 mod audio;
 mod config;
 mod gemini;
+mod gui;
 mod hotkey;
 mod tray;
 mod typer;
@@ -11,10 +12,11 @@ use audio::AudioRecorder;
 use config::VenessaConfig;
 use crossbeam_channel::unbounded;
 use gemini::GeminiClient;
+use gui::SettingsGui;
 use hotkey::{HotkeyConfig, HotkeyEvent, HotkeyManager};
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use tray::{TrayCommand, TrayIcon};
 
 #[cfg(windows)]
@@ -36,20 +38,31 @@ async fn main() -> anyhow::Result<()> {
     println!("=== Venessa: Ultra-lean Voice Typing (Gemini Powered) ===");
 
     // 1. Load or initialize configuration
-    let cfg = VenessaConfig::load();
+    let initial_cfg = VenessaConfig::load();
     let cfg_path = VenessaConfig::config_path();
     println!("Configuration path: {}", cfg_path.display());
 
-    if cfg.gemini_api_key.trim().is_empty() {
-        println!("\n[!] NOTICE: Gemini API key is not configured.");
-        println!("Right-click the Venessa tray icon and click 'Edit Config' or edit:");
-        println!("  {}\n", cfg_path.display());
-    } else {
-        println!("Using Gemini Model: {}", cfg.gemini_model);
-    }
-    println!("Hotkey: {} (mode: {})", cfg.hotkey, cfg.mode);
+    let config_mutex = Arc::new(Mutex::new(initial_cfg.clone()));
 
-    // 2. Initialize Audio Recorder (kept on main thread)
+    // 2. Channels
+    let (hotkey_tx, hotkey_rx) = unbounded::<HotkeyEvent>();
+    let (tray_tx, tray_rx) = unbounded::<TrayCommand>();
+    let (gui_tx, gui_rx) = unbounded::<VenessaConfig>();
+
+    // 3. Initialize Settings GUI
+    let settings_gui = SettingsGui::new(Arc::clone(&config_mutex), gui_tx);
+
+    // If API key is empty on initial launch, open Settings GUI automatically
+    if initial_cfg.gemini_api_key.trim().is_empty() {
+        println!("\n[!] NOTICE: Gemini API key is not configured.");
+        println!("Opening Venessa Settings GUI...\n");
+        settings_gui.show();
+    } else {
+        println!("Using Gemini Model: {}", initial_cfg.gemini_model);
+    }
+    println!("Hotkey: {} (mode: {})", initial_cfg.hotkey, initial_cfg.mode);
+
+    // 4. Initialize Audio Recorder (kept on main thread)
     let mut recorder = match AudioRecorder::new() {
         Ok(rec) => rec,
         Err(e) => {
@@ -58,28 +71,24 @@ async fn main() -> anyhow::Result<()> {
         }
     };
 
-    // 3. Initialize Gemini Client
+    // 5. Initialize Gemini Client
     let gemini = Arc::new(GeminiClient::new(
-        cfg.gemini_api_key.clone(),
-        cfg.gemini_model.clone(),
-        cfg.prompt.clone(),
+        initial_cfg.gemini_api_key.clone(),
+        initial_cfg.gemini_model.clone(),
+        initial_cfg.prompt.clone(),
     ));
 
-    // 4. Setup channels
-    let (hotkey_tx, hotkey_rx) = unbounded::<HotkeyEvent>();
-    let (tray_tx, tray_rx) = unbounded::<TrayCommand>();
-
-    // 5. Start Tray Icon
+    // 6. Start System Tray Icon
     let _tray = TrayIcon::new(tray_tx);
 
-    // 6. Start Global Hotkey Listener
-    let hk_config = HotkeyConfig::parse(&cfg.hotkey);
+    // 7. Start Global Hotkey Listener
+    let hk_config = HotkeyConfig::parse(&initial_cfg.hotkey);
     let mut _hotkey_mgr = HotkeyManager::start(hk_config, hotkey_tx);
 
     let is_recording = Arc::new(AtomicBool::new(false));
-    let mode = cfg.mode.clone();
-    let sound_feedback = cfg.sound_feedback;
-    let type_delay_ms = cfg.type_delay_ms;
+    let mut mode = initial_cfg.mode.clone();
+    let mut sound_feedback = initial_cfg.sound_feedback;
+    let mut type_delay_ms = initial_cfg.type_delay_ms;
 
     println!("Venessa is active in the system tray. Ready to listen!");
 
@@ -153,6 +162,9 @@ async fn main() -> anyhow::Result<()> {
             // Check tray commands
             Ok(cmd) = async { tray_rx.recv().map_err(|e| anyhow::anyhow!(e)) } => {
                 match cmd {
+                    TrayCommand::OpenSettings => {
+                        settings_gui.show();
+                    }
                     TrayCommand::OpenConfig => {
                         let path = VenessaConfig::config_path();
                         let _ = Command::new("notepad.exe")
@@ -164,6 +176,30 @@ async fn main() -> anyhow::Result<()> {
                         break;
                     }
                 }
+            }
+
+            // Check settings updates from GUI
+            Ok(new_cfg) = async { gui_rx.recv().map_err(|e| anyhow::anyhow!(e)) } => {
+                println!("Settings updated via GUI:");
+                println!("  Model: {}", new_cfg.gemini_model);
+                println!("  Hotkey: {}", new_cfg.hotkey);
+                println!("  Mode: {}", new_cfg.mode);
+
+                // Update runtime values
+                mode = new_cfg.mode.clone();
+                sound_feedback = new_cfg.sound_feedback;
+                type_delay_ms = new_cfg.type_delay_ms;
+
+                // Update Gemini client
+                gemini.update(
+                    new_cfg.gemini_api_key.clone(),
+                    new_cfg.gemini_model.clone(),
+                    new_cfg.prompt.clone(),
+                );
+
+                // Update global hotkey hook
+                let new_hk = HotkeyConfig::parse(&new_cfg.hotkey);
+                hotkey::update_hotkey(new_hk);
             }
         }
     }

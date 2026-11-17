@@ -1,6 +1,6 @@
 use crossbeam_channel::Sender;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, OnceLock, RwLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HotkeyEvent {
@@ -82,8 +82,17 @@ impl HotkeyConfig {
 }
 
 static HOOK_SENDER: OnceLock<Sender<HotkeyEvent>> = OnceLock::new();
-static HOOK_CONFIG: OnceLock<HotkeyConfig> = OnceLock::new();
+static HOOK_CONFIG: OnceLock<RwLock<HotkeyConfig>> = OnceLock::new();
 static IS_KEY_DOWN: AtomicBool = AtomicBool::new(false);
+
+pub fn update_hotkey(new_config: HotkeyConfig) {
+    if let Some(lock) = HOOK_CONFIG.get() {
+        if let Ok(mut cfg) = lock.write() {
+            *cfg = new_config;
+            IS_KEY_DOWN.store(false, Ordering::SeqCst);
+        }
+    }
+}
 
 #[cfg(windows)]
 pub struct HotkeyManager {
@@ -95,7 +104,7 @@ pub struct HotkeyManager {
 impl HotkeyManager {
     pub fn start(config: HotkeyConfig, sender: Sender<HotkeyEvent>) -> Self {
         let _ = HOOK_SENDER.set(sender);
-        let _ = HOOK_CONFIG.set(config);
+        let _ = HOOK_CONFIG.set(RwLock::new(config));
         IS_KEY_DOWN.store(false, Ordering::SeqCst);
 
         let is_running = Arc::new(AtomicBool::new(true));
@@ -125,46 +134,48 @@ impl HotkeyManager {
                     let is_down_event = w_param as u32 == WM_KEYDOWN || w_param as u32 == WM_SYSKEYDOWN;
                     let is_up_event = w_param as u32 == WM_KEYUP || w_param as u32 == WM_SYSKEYUP;
 
-                    if let Some(cfg) = HOOK_CONFIG.get() {
-                        let ctrl_down = (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_LCONTROL as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_RCONTROL as i32) as u16 & 0x8000 != 0);
+                    if let Some(lock) = HOOK_CONFIG.get() {
+                        if let Ok(cfg) = lock.read() {
+                            let ctrl_down = (GetAsyncKeyState(VK_CONTROL as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_LCONTROL as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_RCONTROL as i32) as u16 & 0x8000 != 0);
 
-                        let alt_down = (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_LMENU as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_RMENU as i32) as u16 & 0x8000 != 0);
+                            let alt_down = (GetAsyncKeyState(VK_MENU as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_LMENU as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_RMENU as i32) as u16 & 0x8000 != 0);
 
-                        let shift_down = (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_LSHIFT as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_RSHIFT as i32) as u16 & 0x8000 != 0);
+                            let shift_down = (GetAsyncKeyState(VK_SHIFT as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_LSHIFT as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_RSHIFT as i32) as u16 & 0x8000 != 0);
 
-                        let win_down = (GetAsyncKeyState(VK_LWIN as i32) as u16 & 0x8000 != 0)
-                            || (GetAsyncKeyState(VK_RWIN as i32) as u16 & 0x8000 != 0);
+                            let win_down = (GetAsyncKeyState(VK_LWIN as i32) as u16 & 0x8000 != 0)
+                                || (GetAsyncKeyState(VK_RWIN as i32) as u16 & 0x8000 != 0);
 
-                        let mods_satisfied = (!cfg.require_ctrl || ctrl_down)
-                            && (!cfg.require_alt || alt_down)
-                            && (!cfg.require_shift || shift_down)
-                            && (!cfg.require_win || win_down);
+                            let mods_satisfied = (!cfg.require_ctrl || ctrl_down)
+                                && (!cfg.require_alt || alt_down)
+                                && (!cfg.require_shift || shift_down)
+                                && (!cfg.require_win || win_down);
 
-                        if kbd.vkCode == cfg.target_vk {
-                            if is_down_event && mods_satisfied {
-                                if !IS_KEY_DOWN.swap(true, Ordering::SeqCst) {
-                                    if let Some(s) = HOOK_SENDER.get() {
-                                        let _ = s.send(HotkeyEvent::Pressed);
+                            if kbd.vkCode == cfg.target_vk {
+                                if is_down_event && mods_satisfied {
+                                    if !IS_KEY_DOWN.swap(true, Ordering::SeqCst) {
+                                        if let Some(s) = HOOK_SENDER.get() {
+                                            let _ = s.send(HotkeyEvent::Pressed);
+                                        }
+                                    }
+                                } else if is_up_event {
+                                    if IS_KEY_DOWN.swap(false, Ordering::SeqCst) {
+                                        if let Some(s) = HOOK_SENDER.get() {
+                                            let _ = s.send(HotkeyEvent::Released);
+                                        }
                                     }
                                 }
-                            } else if is_up_event {
+                            } else if IS_KEY_DOWN.load(Ordering::SeqCst) && !mods_satisfied {
+                                // If a required modifier was released while target key was held
                                 if IS_KEY_DOWN.swap(false, Ordering::SeqCst) {
                                     if let Some(s) = HOOK_SENDER.get() {
                                         let _ = s.send(HotkeyEvent::Released);
                                     }
-                                }
-                            }
-                        } else if IS_KEY_DOWN.load(Ordering::SeqCst) && !mods_satisfied {
-                            // If a required modifier was released while target key was held
-                            if IS_KEY_DOWN.swap(false, Ordering::SeqCst) {
-                                if let Some(s) = HOOK_SENDER.get() {
-                                    let _ = s.send(HotkeyEvent::Released);
                                 }
                             }
                         }

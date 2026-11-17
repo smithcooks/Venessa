@@ -3,6 +3,7 @@ use std::sync::{Arc, OnceLock};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TrayCommand {
+    OpenSettings,
     OpenConfig,
     Quit,
 }
@@ -34,13 +35,15 @@ impl TrayIcon {
                 PostQuitMessage, RegisterClassW, SetForegroundWindow, TrackPopupMenu,
                 TranslateMessage, HICON, HMENU, IDI_APPLICATION, MF_DISABLED, MF_GRAYED,
                 MF_SEPARATOR, MF_STRING, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
-                WM_COMMAND, WM_DESTROY, WM_RBUTTONUP, WM_USER, WNDCLASSW, WS_OVERLAPPED,
+                WM_COMMAND, WM_DESTROY, WM_LBUTTONDBLCLK, WM_RBUTTONUP, WM_USER, WNDCLASSW,
+                WS_OVERLAPPED,
             };
 
             const WM_TRAYICON: u32 = WM_USER + 100;
             const ID_TRAY_TITLE: usize = 1001;
-            const ID_TRAY_CONFIG: usize = 1002;
-            const ID_TRAY_EXIT: usize = 1003;
+            const ID_TRAY_SETTINGS: usize = 1002;
+            const ID_TRAY_CONFIG: usize = 1003;
+            const ID_TRAY_EXIT: usize = 1004;
 
             unsafe extern "system" fn window_proc(
                 hwnd: HWND,
@@ -63,8 +66,12 @@ impl TrayIcon {
 
                             AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
 
-                            // Open config
-                            let cfg_label: Vec<u16> = "Edit Config (config.toml)\0".encode_utf16().collect();
+                            // Settings GUI
+                            let settings_label: Vec<u16> = "⚙️ Settings...\0".encode_utf16().collect();
+                            AppendMenuW(menu, MF_STRING, ID_TRAY_SETTINGS, settings_label.as_ptr());
+
+                            // Open raw config
+                            let cfg_label: Vec<u16> = "Open Config File (config.toml)\0".encode_utf16().collect();
                             AppendMenuW(menu, MF_STRING, ID_TRAY_CONFIG, cfg_label.as_ptr());
 
                             AppendMenuW(menu, MF_SEPARATOR, 0, null_mut());
@@ -84,12 +91,21 @@ impl TrayIcon {
                                 null_mut(),
                             );
                             DestroyMenu(menu);
+                        } else if event == WM_LBUTTONDBLCLK {
+                            // Double-click tray icon opens settings GUI!
+                            if let Some(s) = TRAY_SENDER.get() {
+                                let _ = s.send(TrayCommand::OpenSettings);
+                            }
                         }
                         0
                     }
                     WM_COMMAND => {
                         let id = (w_param & 0xFFFF) as usize;
-                        if id == ID_TRAY_CONFIG {
+                        if id == ID_TRAY_SETTINGS {
+                            if let Some(s) = TRAY_SENDER.get() {
+                                let _ = s.send(TrayCommand::OpenSettings);
+                            }
+                        } else if id == ID_TRAY_CONFIG {
                             if let Some(s) = TRAY_SENDER.get() {
                                 let _ = s.send(TrayCommand::OpenConfig);
                             }

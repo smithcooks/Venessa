@@ -3,12 +3,13 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
 use reqwest::Client;
 use serde_json::json;
+use std::sync::RwLock;
 
 pub struct GeminiClient {
     client: Client,
-    api_key: String,
-    model: String,
-    prompt: String,
+    api_key: RwLock<String>,
+    model: RwLock<String>,
+    prompt: RwLock<String>,
 }
 
 impl GeminiClient {
@@ -18,16 +19,35 @@ impl GeminiClient {
                 .timeout(std::time::Duration::from_secs(30))
                 .build()
                 .unwrap_or_else(|_| Client::new()),
-            api_key,
-            model,
-            prompt,
+            api_key: RwLock::new(api_key),
+            model: RwLock::new(model),
+            prompt: RwLock::new(prompt),
+        }
+    }
+
+    pub fn update(&self, api_key: String, model: String, prompt: String) {
+        if let Ok(mut k) = self.api_key.write() {
+            *k = api_key;
+        }
+        if let Ok(mut m) = self.model.write() {
+            *m = model;
+        }
+        if let Ok(mut p) = self.prompt.write() {
+            *p = prompt;
         }
     }
 
     pub async fn transcribe_and_clean(&self, wav_bytes: &[u8]) -> Result<String> {
-        if self.api_key.trim().is_empty() {
+        let (api_key, model, prompt) = {
+            let k = self.api_key.read().unwrap().clone();
+            let m = self.model.read().unwrap().clone();
+            let p = self.prompt.read().unwrap().clone();
+            (k, m, p)
+        };
+
+        if api_key.trim().is_empty() {
             return Err(anyhow::anyhow!(
-                "Gemini API key is not set. Please set your key in config.toml"
+                "Gemini API key is not set. Please open Settings from the system tray to enter your key."
             ));
         }
 
@@ -35,7 +55,7 @@ impl GeminiClient {
 
         let url = format!(
             "https://generativelanguage.googleapis.com/v1beta/models/{}:generateContent?key={}",
-            self.model, self.api_key
+            model, api_key
         );
 
         let payload = json!({
@@ -49,7 +69,7 @@ impl GeminiClient {
                             }
                         },
                         {
-                            "text": self.prompt
+                            "text": prompt
                         }
                     ]
                 }

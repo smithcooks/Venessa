@@ -50,7 +50,8 @@ Modern desktop voice-to-text tools (Wispr Flow, Superwhisper, OpenWhispr) rely h
   - **Chat & Social:** Discord, Slack, Telegram, WhatsApp, Teams
   - **Terminals:** Windows Terminal, PowerShell, CMD, Git Bash
 - 🔔 **Subtle Audio Feedback:** Emits gentle Windows notification tones when recording starts and finishes so you always know when Venessa is listening without needing an intrusive overlay.
-- 🪟 **Headless System Tray:** Sits unobtrusively in the Windows taskbar tray. Right-click anytime to open the configuration file or exit.
+- 🪟 **Built-in Settings GUI:** Configure your Gemini API key, model, hotkeys, trigger mode, audio feedback, and prompt in a clean, native Windows dialog without ever touching a text editor.
+- 🔄 **Runs in the Background on Close:** Closing or minimizing the Settings GUI never shuts down the app—Venessa continues running silently in the Windows system tray. Double-click the tray icon or right-click and select **"⚙️ Settings..."** anytime to reopen.
 - 🛡️ **Zero Clipboard Pollution:** Types characters directly instead of overwriting your Windows clipboard.
 
 ---
